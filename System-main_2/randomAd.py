@@ -46,12 +46,12 @@ FPS = 60.0
 SIKAKU_DIR = "image\\small_image\\sikaku\\"
 YOKO_DIR = "image\\small_image\\yokonaga\\"
 CLOSE_DIR = "image\\small_image\\close\\"
-SIMPLE_SIKAKU_PATH = "image\\small_image\\simple\\simple_sikaku.png"
-SIMPLE_YOKO_PATH = "image\\small_image\\simple\\simple_yoko.png"
+SIMPLE_SIKAKU_DIR = "image\\simple\\sikaku\\"
+SIMPLE_YOKO_DIR = "image\\simple\\yokonaga\\"
 WHITE_TRANS_PATH = "image\\white_trans_image\\white_w_trans.png"
 
 # キャンバス関連の定数
-SIZE_WINDOW = "1920x1080"
+SIZE_WINDOW = "1910x1070"
 SIZE_YOKO = "700x150"
 SIZE_SIKAKU = "300x280"
 SIZE_ZENMEN = "300x350"
@@ -67,12 +67,18 @@ IGNORE_MAX = 6
 # 広告無視の確率の変更に用いる変数
 ignore_rate = 1
 
+# 表示している画像が存在するディレクトリ
+now_dir = ""
+now_dir = ""
+
 # 広告種類が何通りあるかのリスト
 ad_kinds = [0,1,2,3,4,5,6]
 
 # 画像のパスを格納するリスト
 im_sikaku_list = []
 im_yoko_list = []
+im_simple_sikaku_list = []
+im_simple_yoko_list = []
 
 # 画像のパスを格納する変数
 cur_im_sikaku_path = ""
@@ -106,7 +112,6 @@ start = None
 
 # キャンバスの初期設置を先に終わらせるために用いる
 event = Event()
-event2 = Event()
 
 # キャンバス関連の変数
 root, root = (None, None)
@@ -146,19 +151,17 @@ def get_elapsed_time():
 
 # 同期するため,mainloop()から0.5秒後に呼ばれる関数
 def set_event(id):
-	global event, event2
+	global event
 	if id == 1:
 		event.set()
-	else:
-		event2.set()
 
 # 初期設定関数1 canvas関連まとめてクラス検討
 def set_canvas():
 
-	global root, canvas, item, im_sikaku_list, img
+	global root, canvas, item, im_sikaku_list, img, \
+	root2, canvas2, item2, im_sikaku_list, img2
 
 	root = tkinter.Tk()
-	root.title("test1")
 	root.geometry("800x450+250+250")	# 作成するwindowサイズ+x+y
 	root.overrideredirect(1) # ウィンドウ上部のバー(閉じる・最小化ボタンなど)を削除
 	root.attributes("-topmost", True) # 常に最前面に配置する
@@ -180,20 +183,9 @@ def set_canvas():
 	root.roundedbutton["bg"] = "white" # 背景がTkinterウィンドウと同じに
 	root.roundedbutton["border"] = "0" # ボタンの境界線が削除
 	root.roundedbutton.place(x=75,y=280)
-
-	root.withdraw() # 非表示ではじめる
-
-	root.after(500, set_event, 1)
-
-	root.mainloop()
-
-# 初期設置関数2 Toplevel()に気が付かず2つめのメインウィンドウ作成しています 時間があれば修正
-def set_canvas2():
-
-	global root2, canvas2, item2, im_sikaku_list, img2
-
-	root2 = tkinter.Tk()
-	root2.title("test2")
+	
+	# 以下toplevel()でのサブウィンドウ表示
+	root2 = tkinter.Toplevel()
 	root2.geometry("800x450+500+500")
 	root2.overrideredirect(1)
 	root2.attributes("-topmost", True)
@@ -214,11 +206,19 @@ def set_canvas2():
 	root2.roundedbutton["border"] = "0"
 	root2.roundedbutton.place(x=75,y=280)
 
-	root2.withdraw()
+	root2.withdraw() # 非表示ではじめる
+	root.withdraw()
 
-	root2.after(500, set_event, 2)
+	root.after(500, set_event, 1)
 
-	root2.mainloop()
+	root.mainloop()
+
+# 初期設置関数2 Toplevel()に気が付かず2つめのメインウィンドウ作成しています 時間があれば修正
+def set_canvas2():
+
+	global root2, canvas2, item2, im_sikaku_list, img2
+
+	
 
 # 前面系で閉じるを押したときのログ(閉じるボタンコマンドから呼び出し)
 def close_log(time):
@@ -267,6 +267,8 @@ def on_release(key):
 
 # ログ出力関数
 def ad_log(time, ad_kind, is_result, is_correct, is_disp, content, content2=""):
+	global now_dir, now_dir2
+	
 	ad_kinds = [0,0,0,0,0,0,0] # 無し,上下刺激,上下一般,前面刺激,前面一般,無視刺激,無視一般
 	contents = ["",""]
 	rw = [0,0] # right or wrong
@@ -274,8 +276,8 @@ def ad_log(time, ad_kind, is_result, is_correct, is_disp, content, content2=""):
 	if is_disp == True:
 		ad_kinds[ad_kind] = 1
 		if ad_kind != 0:
-			contents[0] = content.replace("image\\small_image\\", "") # もうちょっと短縮する
-			contents[1] = content2.replace("image\\small_image\\", "")
+			contents[0] = content.replace(now_dir, "")
+			contents[1] = content2.replace(now_dir2, "")
 			if not(ad_kind == 1 or ad_kind == 2):
 				contents[1] = ""
 	
@@ -292,8 +294,8 @@ def ad_log(time, ad_kind, is_result, is_correct, is_disp, content, content2=""):
 
 # 画像を選択しパスをnext_im_sikaku_pathとnext_im_yoko_pathに格納する関数
 def select_ad_image(ad_kind):
-	global SIMPLE_SIKAKU_PATH, SIMPLE_YOKO_PATH, im_yoko_list, im_sikaku_list, next_im_yoko_list, next_im_sikaku_list, \
-	next_im_yoko_path, next_im_sikaku_path
+	global im_yoko_list, im_sikaku_list, im_simple_yoko_list, im_simple_sikaku_list, next_im_yoko_list, next_im_sikaku_list, \
+	next_im_yoko_path, next_im_sikaku_path, now_dir, now_dir2, SIKAKU_DIR, YOKO_DIR, SIMPLE_SIKAKU_DIR, SIMPLE_YOKO_DIR
 	
 	if ad_kind == 0:
 		(next_im_yoko_list, next_im_sikaku_list) = ("", "")
@@ -302,9 +304,13 @@ def select_ad_image(ad_kind):
 	if ad_kind % 2 == 0: # 一般画像
 		next_im_yoko_path = random.choice(im_yoko_list)
 		next_im_sikaku_path = random.choice(im_sikaku_list)
+		now_dir = SIKAKU_DIR
+		now_dir2 = YOKO_DIR
 	else: # 刺激画像
-		next_im_yoko_path = SIMPLE_YOKO_PATH
-		next_im_sikaku_path = SIMPLE_SIKAKU_PATH
+		next_im_yoko_path = random.choice(im_simple_yoko_list)
+		next_im_sikaku_path = random.choice(im_simple_sikaku_list)
+		now_dir = SIMPLE_SIKAKU_DIR
+		now_dir2 = SIMPLE_YOKO_DIR
 
 # リセット区間中に呼び出される,広告表示の準備をする関数
 def set_display_ad(ad_kind):
@@ -320,7 +326,10 @@ def set_display_ad(ad_kind):
 	
 	print("next_im_sikaku_path is" + str(next_im_sikaku_path))
 	print("next_im_sikaku_path is" + str(next_im_yoko_path))
-
+	
+	canvas.delete(item) ## 追加
+	canvas2.delete(item2)
+	
 	# 表示場所やボタンの設定
 	pos, pos2 = (None, None)
 	geo = None
@@ -337,7 +346,7 @@ def set_display_ad(ad_kind):
 		geo2 = SIZE_YOKO + "+" + pos2
 		img2 = ImageTk.PhotoImage(file=next_im_yoko_path, master=root2)
 		root2.attributes('-alpha', 1.0) # 透明度を戻す
-		root2.attributes("-topmost", True) # 最前面に戻す
+		root2.attributes("-topmost", True)
 	else:
 		if ad_kind == 3 or ad_kind == 4:
 			com = btn_click
@@ -356,16 +365,18 @@ def set_display_ad(ad_kind):
 		geo = SIZE_ZENMEN + "+" + pos
 		geo2 = SIZE_WINDOW + "+" + pos2
 		img2 = ImageTk.PhotoImage(file=WHITE_TRANS_PATH, master=root2)
-		print("root2.attrubutes()")
 		root2.attributes('-alpha', 0.2) # 透明
 		root2.attributes("-topmost", False) # 最前面だと閉じる押せなくなるから
 	
 	root.geometry(geo)
 	root2.geometry(geo2)
 	img = ImageTk.PhotoImage(file=next_im_sikaku_path, master=root)
-	canvas.itemconfig(item, image=img)
-	canvas2.itemconfig(item2, image=img2)
-
+	
+	#canvas.itemconfig(item, image=img)
+	#canvas2.itemconfig(item2, image=img2)
+	item = canvas.create_image(0, 0, image=img, anchor=tkinter.NW)
+	item2 = canvas2.create_image(0, 0, image=img2, anchor=tkinter.NW)
+	
 	canvas.place()
 	canvas2.place()
 	
@@ -423,7 +434,7 @@ def check_url(driver):
 def main_sub():
 
 	global start, CHROMEDRIVER_PATH, ad_kinds, TIME_ONESET, TIME_FIRSTWAITING, TIME_LASTWAITING, NUM_LOOP, \
-	flag_trans, flag_finish, is_result, event, event2, root, root2, canvas, canvas2, item, item2, \
+	flag_trans, flag_finish, is_result, event, root, root2, canvas, canvas2, item, item2, \
 	flag_click, is_disp, time_close, FPS, cur_im_sikaku_path, cur_im_yoko_path, disp_ready
 	
 	im_yoko_path, im_sikaku_path = (None, None) # 宣言だけでも local
@@ -433,7 +444,6 @@ def main_sub():
 
 	# 別スレッドのset_canvasが終わるまで待つ
 	event.wait()
-	event2.wait()
 
 	options = webdriver.ChromeOptions()
 	options.add_experimental_option("excludeSwitches", ['enable-automation'])
@@ -570,6 +580,10 @@ if __name__ == '__main__': # コマンドラインから実行された場合
 
 	im_sikaku_list = get_image(SIKAKU_DIR)
 	im_yoko_list = get_image(YOKO_DIR)
+	im_simple_sikaku_list = get_image(SIMPLE_SIKAKU_DIR)
+	im_simple_yoko_list = get_image(SIMPLE_YOKO_DIR)
+	print(im_simple_sikaku_list)
+	print(im_simple_yoko_list)
 
 	try:
 		preparation_files()
@@ -577,10 +591,6 @@ if __name__ == '__main__': # コマンドラインから実行された場合
 		advertisingDisplayThread = Thread(target=set_canvas)
 		advertisingDisplayThread.setDaemon(True)
 		advertisingDisplayThread.start()
-
-		advertisingDisplayThread2 = Thread(target=set_canvas2)
-		advertisingDisplayThread2.setDaemon(True)
-		advertisingDisplayThread2.start()
 
 		main_sub()
 
