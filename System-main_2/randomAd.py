@@ -1,8 +1,6 @@
 # 偶に上下バナーの単色表示で上のバナーが出ず下の表示だけしかないバグ ← 原因不明 set_event()でmainloop()を先に起動することを保証したが解決できない
 # ボタンdestroy時の穴あきは直す window作り直す ← 現状閉じるボタンと画像が重ならないように配置しているので修正していません
-# マウスログ組み込み 出力は単体(x, y, pressed, 画面(result, quiz, true, false), クリックミス?, どっちのボタン押した?)
 # 白の透過画像で前面広告時閉じる以外クリックできなくする
-# 60fpsループ
 #
 
 import time
@@ -23,11 +21,11 @@ import pyautogui
 start_program_elapsed = time.perf_counter()
 start_program_date = datetime.datetime.now()
 
-# 下のほうで記録
+# 以下グローバル定数・変数定義 グローバルの必要ないものもあるかも
 
 # 保存するフォルダのパスの定数作成
 RESULT_DIR = "result\\"
-NAME_PATH = "result\\name.txt"
+NAME_PATH = "result\\nowUser.txt"
 if os.path.exists(NAME_PATH) == False:
 	print(NAME_PATH + "にファイルがありません")
 	sys.exit(1)
@@ -39,11 +37,13 @@ with open(NAME_PATH, 'r') as f:
 CHROMEDRIVER_PATH = "chromedriver_win32\chromedriver"
 
 # 広告関連の定数
-TIME_ONESET = 12
 TIME_FIRSTWAITING = 6
 TIME_EXPERIMENT = 60 * 14
 TIME_RESET = 15
 NUM_LOOP = 3
+
+# ループ速度
+FPS = 60.0
 
 # 画像のパス
 SIKAKU_DIR = "image\\small_image\\sikaku\\"
@@ -51,8 +51,10 @@ YOKO_DIR = "image\\small_image\\yokonaga\\"
 CLOSE_DIR = "image\\small_image\\close\\"
 SIMPLE_SIKAKU_PATH = "image\\small_image\\simple\\simple_sikaku.png"
 SIMPLE_YOKO_PATH = "image\\small_image\\simple\\simple_yoko.png"
+WHITE_TRANS_PATH = "image\\white_trans_image\\white_w_trans.png"
 
 # キャンバス関連の定数
+SIZE_WINDOW = "1920x1080"
 SIZE_YOKO = "700x150"
 SIZE_SIKAKU = "300x280"
 SIZE_ZENMEN = "300x350"
@@ -62,27 +64,31 @@ POS_JOUGE_TOP_RESULT = "610+150"
 POS_JOUGE_BUTTOM_RESULT = "810+650"
 POS_ZENMEN = "810+365"
 
+# 無視広告時の最大クリック数
+IGNORE_MAX = 6
+
+# 広告無視の確率の変更に用いる変数
+ignore_rate = 1
+
 # 広告種類が何通りあるかのリスト
 ad_kinds = [0,1,2,3,4,5,6]
-#ad_kinds = [1,2,3,4] # デバッグ用
 
 # 画像のパスを格納するリスト
 im_sikaku_list = []
 im_yoko_list = []
 
-# ログに用いる変数
-time_disp = None
+# ログやリセット区間測定のために用いる変数
 time_close = None
-current_ad_kind = None
 
 # 広告の表示/非表示に用いるフラグ
 flag_click = False
-flag_disp = False
+is_disp = False
 
 # 画面遷移の判定に用いるフラグ
 flag_trans = False
 flag_finish = False
-is_result = False
+is_result = False # 正解表示画面か
+is_correct = False # 正解画面か
 
 # auto_clickに用いるフラグ
 flag_auto_click = False
@@ -107,21 +113,19 @@ img, img2 = (None, None) # PhotoImageでの参照先が消えないようにグ�
 # ディレクトリの存在確認+ログファイルを作る関数
 def preparation_files():
 	global RESULT_DIR, SAVE_DIR
-	#if False == os.path.isdir(RESULT_DIR):
-	#	os.mkdir(RESULT_DIR)
 
 	if os.path.isdir(SAVE_DIR) == False:
 		print(SAVE_DIR + "フォルダが見つかりません")
 		sys.exit(1)
-	#else :
-		#os.mkdir(SAVE_DIR)
-		# os.mkdir(CAMERA_DIR)
-		# os.mkdir(SCREENSHOT_DIR)
 
-	with open(SAVE_DIR+'\\advertising.csv','a',newline='') as f:
+	with open(SAVE_DIR+'\\advertising.csv','a',newline='') as f: # 広告ログ
 		writer = csv.writer(f)
-		writer.writerow(['time_display','time_close','pos','content','content2',\
-		'start_quiz_system(perf)','start_program(perf)','start_program_date','finish_program(perf)','transision_finish_screen(perf)'])
+		writer.writerow(['time','nasi','jouge+','jouge','zenmen+','zenmen','musi+','musi','image','image2(banner)',\
+		'correct','incorrect'])
+	
+	with open(SAVE_DIR+'\\advertising_close.csv','a',newline='') as f: # 閉じるオンリーログ
+		writer = csv.writer(f)
+		writer.writerow(['time','is_closed'])
 
 # 画像のpathを四角画像と横長画像にわけてlistに格納
 def get_image(image_dir):
@@ -210,23 +214,35 @@ def set_canvas2():
 
 	root2.mainloop()
 
+# 前面系で閉じるを押したときのログ(閉じるボタンコマンドから呼び出し)
+def close_log(time):
+	with open(SAVE_DIR+'\\advertising_close.csv','a',newline='') as f:
+		writer = csv.writer(f)
+		writer.writerow([time,1])
+
 # 閉じるボタンコマンド
 def btn_click():
-	global root, flag_click, time_close, flag_disp
+	global root, flag_click, time_close, is_disp, root2
 	time_close = get_elapsed_time()
 	root.withdraw()
-	flag_disp = False
+	root2.withdraw()
+	is_disp = False
 	flag_click = True
+	close_log(time_close)
 
 # 閉じるボタンコマンド(6割クリック無視)
 def ignore_btn_click():
-	global root, flag_click, time_close, flag_disp
-	if random.random() < 0.6:
+	global root, flag_click, time_close, is_disp, ignore_rate, IGNORE_MAX, root2
+	if random.random() < ignore_rate:
+		ignore_rate = ignore_rate - 1/IGNORE_MAX
 		return
+	ignore_rate = 1
 	time_close = get_elapsed_time()
 	root.withdraw()
-	flag_disp = False
+	root2.withdraw()
+	is_disp = False
 	flag_click = True
+	close_log(time_close)
 
 # on_release関数に呼び出される関数
 def autoClick():
@@ -242,21 +258,38 @@ def on_release(key):
 		return False
 
 # ログ出力関数
-def ad_log(times, pos, content, content2=""):
+def ad_log(time, ad_kind, is_result, is_correct, is_disp, content, content2=""):
+	ad_kinds = [0,0,0,0,0,0,0] # 無し,上下刺激,上下一般,前面刺激,前面一般,無視刺激,無視一般
+	contents = ["",""]
+	rw = [0,0] # right or wrong
+	
+	if is_disp == True:
+		ad_kinds[ad_kind] = 1
+		if ad_kind != 0:
+			contents[0] = content.replace("image\\small_image\\", "") # もうちょっと短縮する
+			contents[1] = content2.replace("image\\small_image\\", "")
+			if not(ad_kind == 1 or ad_kind == 2):
+				contents[1] = ""
+	
+	if is_result == True: # 正解表示画面
+		if is_correct == True:
+			rw[0] = 1
+		else:
+			rw[1] = 1
+	
 	with open(SAVE_DIR + '\\advertising.csv', 'a', newline='') as f:
 		writer = csv.writer(f)
-		c = content.replace("image\\small_image\\", "")
-		c2 = content2.replace("image\\small_image\\", "")
-		writer.writerow([times[0],times[1],pos,c,c2])
+		# 時間,広告種類(7つ分),内容(最大2つ),正解画面か不正解画面か(2つ)
+		writer.writerow([time,ad_kinds[0],ad_kinds[1],ad_kinds[2],ad_kinds[3],ad_kinds[4],ad_kinds[5],ad_kinds[6],contents[0],contents[1],rw[0],rw[1]])
 
 # 広告表示関数
 def display_ad(ad_kind, im_yoko_path, im_sikaku_path):
 	global root, root2, canvas, canvas2, item, item2, CLOSE_DIR, POS_ZENMEN, \
 	POS_JOUGE_TOP_QUIZ, POS_JOUGE_BUTTOM_QUIZ, POS_JOUGE_TOP_RESULT, POS_JOUGE_BUTTOM_RESULT, \
-	SIZE_YOKO, SIZE_SIKAKU, flag_disp, img, img2, SIZE_ZENMEN
+	SIZE_YOKO, SIZE_SIKAKU, is_disp, img, img2, SIZE_ZENMEN, WHITE_TRANS_PATH, SIZE_WINDOW
 
 	if ad_kind == 0: # 刺激区間中の無刺激区間
-		flag_disp = True
+		is_disp = True
 		return
 
 	# 表示場所やボタンの設定
@@ -272,67 +305,93 @@ def display_ad(ad_kind, im_yoko_path, im_sikaku_path):
 			pos = POS_JOUGE_BUTTOM_QUIZ
 			pos2 = POS_JOUGE_TOP_QUIZ
 		geo = SIZE_SIKAKU + "+" + pos
+		geo2 = SIZE_YOKO + "+" + pos2
+		img2 = ImageTk.PhotoImage(file=im_yoko_path, master=root2)
+		root2.attributes('-alpha', 1.0) # 透明度を戻す
+		root2.attributes("-topmost", True) # 最前面に戻す
 	else:
 		if ad_kind == 3 or ad_kind == 4:
 			com = btn_click
 		else:
 			com = ignore_btn_click
+		
+		root2.roundedbutton.destroy()
+		
 		root.loadimage = tkinter.PhotoImage(file=CLOSE_DIR+"small_tojiru_button.png", master=root)
 		root.roundedbutton = tkinter.Button(root, image=root.loadimage, command=com)
 		root.roundedbutton["bg"] = "white"
 		root.roundedbutton["border"] = "0"
 		root.roundedbutton.place(x=75,y=280)
 		pos = POS_ZENMEN
-		pos2 = pos
-		geo = SIZE_ZENMEN+ "+" + pos
-
-	geo2 = SIZE_YOKO + "+" + pos2
+		pos2 = "0+0"
+		geo = SIZE_ZENMEN + "+" + pos
+		geo2 = SIZE_WINDOW + "+" + pos2
+		img2 = ImageTk.PhotoImage(file=WHITE_TRANS_PATH, master=root2)
+		root2.attributes('-alpha', 0.2) # 透明
+		root2.attributes("-topmost", False)
+	
 	root.geometry(geo)
 	root2.geometry(geo2)
 	img = ImageTk.PhotoImage(file=im_sikaku_path, master=root)
-	img2 = ImageTk.PhotoImage(file=im_yoko_path, master=root2)
 	canvas.itemconfig(item, image=img)
 	canvas2.itemconfig(item2, image=img2)
 
 	canvas.place()
 	canvas2.place()
 
+	root2.deiconify()
 	root.deiconify()
-	if ad_kind == 1 or ad_kind == 2:
-		root2.deiconify()
 
-	flag_disp = True
+	is_disp = True
 
 # 広告非表示 + それに伴う処理をまとめた関数
 def hide_ad():
-	global flag_disp, time_disp, time_close, root, root2, current_ad_kind
+	global is_disp, time_close, root, root2, current_ad_kind
 
 	root.withdraw()
 	root2.withdraw()
 
 	time_close = get_elapsed_time()
 
-	#times = (time_disp, time_close)
-	#if current_ad_kind == 1 or current_ad_kind == 2:
-	#	# 追加 question or result, resultならtrue or false + questionid
-	#	ad_log(times, current_ad_kind, im_sikaku_path, im_yoko_path)
-	#else:
-	#	# 追加 question or result, resultならtrue or false + questionid
-	#	ad_log(times, current_ad_kind, im_sikaku_path)
+	is_disp = False
 
-	flag_disp = False
+# urlによって状態変数などを変更する関数
+def check_url(driver):
+	global is_result, flag_trans, is_correct, flag_finish
+	
+	cur_url = driver.current_url
+	if r"http://3.134.34.102/question?result=" in cur_url: # 正否表示画面 # http://3.134.34.102/question?result=true&questionid=86
+		if is_result == False:
+			flag_trans = True
+		else:
+			flag_trans = False
+		if "true" in cur_url: # 正解画面
+			is_correct = True
+		else:
+			is_correct = False
+		is_result = True
+	elif r"http://3.134.34.102/question" in cur_url: # 出題画面 # http://3.134.34.102/question
+		if is_result == True:
+			flag_trans = True
+		else:
+			flag_trans = False
+		is_result = False
+	elif r"http://3.134.34.102/result" == cur_url: # 終了画面 一応
+		flag_finish = True
 
 def main_sub():
 
 	global start, CHROMEDRIVER_PATH, ad_kinds, TIME_ONESET, TIME_FIRSTWAITING, TIME_LASTWAITING, NUM_LOOP, \
 	flag_trans, flag_finish, is_result, event, event2, root, root2, canvas, canvas2, item, item2, \
-	SIMPLE_SIKAKU_PATH, SIMPLE_YOKO_PATH, flag_click, flag_disp, time_disp, current_ad_kind, \
-	start_program_elapsed, start_program_date, time_close
+	SIMPLE_SIKAKU_PATH, SIMPLE_YOKO_PATH, flag_click, is_disp, current_ad_kind, \
+	start_program_elapsed, start_program_date, time_close, FPS
+	
+	im_yoko_path, im_sikaku_path = (None, None) # 宣言だけでも
 
 	while flag_pose == False or flag_cap == False:
 		pass
 
-	# どこかしらで待つ
+	# 別スレッドのset_canvasが終わるまで待つ
 	event.wait()
 	event2.wait()
 
@@ -351,37 +410,41 @@ def main_sub():
 
 	# クイズスタート時のタイムスタンプ & 記録
 	start = time.perf_counter()
-	with open(SAVE_DIR + '\\advertising.csv', 'a', newline='') as f:
+	start_quiz_date = datetime.datetime.now().strftime('%H:%M:%S.%f') # 上の行との間に小さなズレがあるかも
+	with open(SAVE_DIR+'\\startTime.csv','a',newline='') as f: # プログラム開始終了タイムスタンプ
 		writer = csv.writer(f)
-		writer.writerow(['','','','','',str(start),str(start_program_elapsed),str(start_program_date)])
+		writer.writerow(['randomAd',start_quiz_date])
 
 	print("wait " + str(TIME_FIRSTWAITING) + " second") # デバッグ用
-	while get_elapsed_time() < TIME_FIRSTWAITING: # 最初待機
-		pass
+	time_before = 0 - FPS # ループがいきなり始まってほしいので
+	while get_elapsed_time() < TIME_FIRSTWAITING: # 最初待機 + 一応ログ
+		elapsed = get_elapsed_time()
+		if elapsed - time_before < 1.0 / FPS: # 前のループからそこまで時間が経っていない場合 中の処理重い場合かなりズレが出てくる
+			continue
+		
+		time_before = elapsed
+		
+		check_url(driver)
+			
+		if elapsed >= TIME_FIRSTWAITING:
+			break
+		
+		ad_log(elapsed, 0, is_result, is_correct, False, "", "")
 
 	time_close = 0 - TIME_RESET # 練習後に15秒リセット後と同じ動作をさせるため
-	print(str(TIME_ONESET/2) + " close " + str(TIME_ONESET/2) + " disp") # デバッグ用
+	print("for-while loop start") # デバッグ用
 	for i in range(NUM_LOOP):
 		random.shuffle(ad_kinds)
 		setcount = 0 # 範囲は0~6
-		ad_kinds = [1,6,5,3,2,4,0] # デバッグ用
+		ad_kinds = [4,0,4,6,1,3,5] # デバッグ用
 		while setcount <= 6:
 			elapsed = get_elapsed_time()
-			cur_url = driver.current_url
-			if r"http://3.134.34.102/question?result=" in cur_url:  # 正否表示画面 # http://3.134.34.102/question?result=true&questionid=86
-				if is_result == False:
-					flag_trans = True
-				else:
-					flag_trans = False
-				is_result = True
-			elif r"http://3.134.34.102/question" in cur_url: # 出題画面 # http://3.134.34.102/question
-				if is_result == True:
-					flag_trans = True
-				else:
-					flag_trans = False
-				is_result = False
-			elif r"http://3.134.34.102/result" == cur_url: # 終了画面 一応
-				flag_finish = True
+			if elapsed - time_before < 1.0 / FPS: # 前のループからそこまで時間が経っていない場合
+				continue
+			
+			time_before = elapsed
+			
+			check_url(driver)
 
 			# 終了画面になった時
 			if flag_finish == True:
@@ -411,62 +474,71 @@ def main_sub():
 
 						# 広告表示
 						display_ad(ad_kinds[setcount], im_yoko_path, im_sikaku_path)
-						current_ad_kind = ad_kinds[setcount]
-						time_disp = elapsed
 
 					else: # 正解表示画面
-						if flag_disp == True: # 既に広告表示されている場合
+						if is_disp == True: # 既に広告表示されている場合
 							hide_ad()
 							time_close = elapsed
 							setcount = setcount + 1
 
 				else: # 画面遷移しない場合
-					# ログなどの処理
+					# 処理
 					pass
 
 			else: # 無刺激区間(リセット区間)
-				# ログなどの処理
+				# 処理
 				pass
-
-
+			
+			# 以下while抜ける前の処理
+			if setcount >= len(ad_kinds): # 応急処置的
+				suf = len(ad_kinds)
+			else:
+				suf = setcount
+			ad_log(elapsed, ad_kinds[suf], is_result, is_correct, is_disp, im_sikaku_path, im_yoko_path)
+		
+		
 		if flag_finish == True: # リザルト画面
 			finish = time.perf_counter() # 終了画面への遷移を感知する時間より,プログラムが終了する時間のほうが早いので不要?
 			break;
 
-	# ここより最後の追加待機時間+終了時間計測処理
+	# 以下最後の追加無刺激区間+終了時間計測処理
 
-	if flag_disp == True:
+	if is_disp == True:
 		hide_ad()
 
-	if flag_finish != True: # 上のループがwhileの条件で自然と終了した時
+	if flag_finish != True: # 上のfor-whileループが自然に終了した時
 		print("wait " + str( get_elapsed_time() - TIME_EXPERIMENT )) # デバッグ用
 		while get_elapsed_time() < TIME_EXPERIMENT: # 実験終了まで待機処理
-			time_elapsed = get_elapsed_time()
-			cur_url = driver.current_url
-			if r"http://3.134.34.102/result" == cur_url: # もしwhileを抜ける前に終了画面になった時はその時間を記録
-				flag_finish = True
+			elapsed = get_elapsed_time()
+			if elapsed - time_before < 1.0 / FPS:
+				continue
+				
+			time_before = elapsed
+			check_url(driver)
+			if flag_finish == True:
 				finish = time.perf_counter()
+				break
+			ad_log(elapsed, 0, is_result, is_correct, False, "", "")
 
-	times = (time.perf_counter(), "")
+	times = (time.perf_counter(), "") # ""は代入時型のエラー可能性あるかも
 
 	if flag_finish == True: # 恐らく実行されない(for-whileループが終わるほうが早い)
 		times[1] = finish
 
-	with open(SAVE_DIR + '\\advertising.csv', 'a', newline='') as f: # 終了時間を記録 times[0]は自然に閉じた時間, times[1]はリザルト画面に遷移した時間
+	with open(SAVE_DIR + '\\advertising_time_stamp.csv', 'a', newline='') as f: # 終了時間を記録 times[0]は自然に閉じた時間, times[1]はリザルト画面に遷移した時間
 		writer = csv.writer(f)
-		writer.writerow(['','','','','','','','',times[0],times[1]])
+		writer.writerow(['','','',times[0],times[1]])
 
 	print("finish") # 確認用
 
 	while True: # 終了画面への遷移はかなり遅れるので終了時間はプログラムが終わった時の時間にして,このwhileループの中身はpassでも良いかも 一応記述しておきます
 		if flag_finish != True:
-			cur_url = driver.current_url
-			if r"http://3.134.34.102/result" == cur_url:
-				flag_finish = True
+			check_url(driver)
+			if flag_finish == True:
 				finish = time.perf_counter()
-				with open(SAVE_DIR + '\\advertising.csv', 'a', newline='') as f:
+				with open(SAVE_DIR + '\\advertising_time_stamp.csv', 'a', newline='') as f:
 					writer = csv.writer(f)
-					writer.writerow(['','','','','','','','','',finish])
+					writer.writerow(['','','',finish])
 
 # main
 
