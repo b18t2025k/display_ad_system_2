@@ -213,12 +213,15 @@ def set_canvas():
 
 	root.mainloop()
 
-# 初期設置関数2 Toplevel()に気が付かず2つめのメインウィンドウ作成しています 時間があれば修正
-def set_canvas2():
-
-	global root2, canvas2, item2, im_sikaku_list, img2
-
+# 一瞬だけ今の画像を透過白画像に変更する関数
+def display_white_moment():
+	global root, canvas, img, item, root2, canvas2, img2, item2, WHITE_TRANS_PATH
 	
+	img = ImageTk.PhotoImage(file=WHITE_TRANS_PATH, master=root)
+	img2 = ImageTk.PhotoImage(file=WHITE_TRANS_PATH, master=root2)
+	
+	canvas.itemconfig(item, image=img)
+	canvas2.itemconfig(item2, image=img2)
 
 # 前面系で閉じるを押したときのログ(閉じるボタンコマンドから呼び出し)
 def close_log(time):
@@ -231,6 +234,7 @@ def btn_click():
 	global root, flag_click, time_close, is_disp, root2
 	print("flag_click")
 	time_close = get_elapsed_time()
+	display_white_moment()
 	root.withdraw()
 	root2.withdraw()
 	is_disp = False
@@ -246,6 +250,7 @@ def ignore_btn_click():
 		return
 	ignore_rate = 1
 	time_close = get_elapsed_time()
+	display_white_moment()
 	root.withdraw()
 	root2.withdraw()
 	is_disp = False
@@ -395,10 +400,12 @@ def display_ad(ad_kinds, setcount):
 	
 	is_disp = True
 
-# 広告非表示 + それに伴う処理をまとめた関数
+# 広告非表示関数
 def hide_ad():
 	global is_disp, time_close, root, root2, disp_ready
 
+	display_white_moment()
+	
 	root.withdraw()
 	root2.withdraw()
 
@@ -582,8 +589,6 @@ if __name__ == '__main__': # コマンドラインから実行された場合
 	im_yoko_list = get_image(YOKO_DIR)
 	im_simple_sikaku_list = get_image(SIMPLE_SIKAKU_DIR)
 	im_simple_yoko_list = get_image(SIMPLE_YOKO_DIR)
-	print(im_simple_sikaku_list)
-	print(im_simple_yoko_list)
 
 	try:
 		preparation_files()
