@@ -132,8 +132,8 @@ def preparation_files():
 	exutil.checkfile(SAVE_DIR+'\\advertising.csv')
 	with open(SAVE_DIR+'\\advertising.csv','a',newline='') as f: # 広告ログ
 		writer = csv.writer(f)
-		writer.writerow(['time','nasi','jouge+','jouge','zenmen+','zenmen','musi+','musi','image','image2(banner)',\
-		'correct','incorrect'])
+		writer.writerow(['time','nasi','jouge+','jouge','zenmen+','zenmen','musi+','musi','image',\
+		'correct','incorrect']) # 上下の場合は'image'の次の列に'image2(banner)'を追加
 
 	exutil.checkfile(SAVE_DIR+'\\advertising_close.csv')
 	with open(SAVE_DIR+'\\advertising_close.csv','a',newline='') as f: # 閉じるオンリーログ
@@ -313,8 +313,8 @@ def ad_log(time, ad_kind, is_result, is_correct, is_disp, content, content2=""):
 	
 	with open(SAVE_DIR + '\\advertising.csv', 'a', newline='') as f:
 		writer = csv.writer(f)
-		# 時間,広告種類(7つ分),内容(最大2つ),正解画面か不正解画面か(2つ)
-		writer.writerow([time,ad_kinds[0],ad_kinds[1],ad_kinds[2],ad_kinds[3],ad_kinds[4],ad_kinds[5],ad_kinds[6],contents[0][:-4],contents[1][:-4],rw[0],rw[1]])
+		# 時間,広告種類(7つ分),内容(最大2つ),正解画面か不正解画面か(2つ), 上下の場合はcontent[0][-4]の次にcontents[1][:-4]を追加
+		writer.writerow([time,ad_kinds[0],ad_kinds[1],ad_kinds[2],ad_kinds[3],ad_kinds[4],ad_kinds[5],ad_kinds[6],contents[0][:-4],rw[0],rw[1]])
 
 # 画像を選択しパスをnext_im_sikaku_pathとnext_im_yoko_pathに格納する関数 追加で一度表示した画像を一周するまで表示しない処理いれた
 def select_ad_image(ad_kind):
