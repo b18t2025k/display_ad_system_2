@@ -132,7 +132,7 @@ def preparation_files():
 	exutil.checkfile(SAVE_DIR+'\\advertising.csv')
 	with open(SAVE_DIR+'\\advertising.csv','a',newline='') as f: # 広告ログ
 		writer = csv.writer(f)
-		writer.writerow(['time','nasi','jouge+','jouge','zenmen+','zenmen','musi+','musi','image',\
+		writer.writerow(['time','nasi','sita/n','sita/p','zenmen/n','zenmen/p','musi/n','musi/p','image',\
 		'correct','incorrect']) # 上下の場合は'image'の次の列に'image2(banner)'を追加
 
 	exutil.checkfile(SAVE_DIR+'\\advertising_close.csv')
@@ -297,6 +297,7 @@ def ad_log(time, ad_kind, is_result, is_correct, is_disp, content, content2=""):
 	rw = [0,0] # right or wrong
 	
 	if is_disp == True:
+		ad_kinds[ad_kind] = 1
 		if ad_kind != 0:
 			contents[0] = content.replace(now_dir, "")
 			contents[1] = content2.replace(now_dir2, "")
